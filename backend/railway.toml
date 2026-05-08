@@ -1,6 +1,3 @@
-# Railway Configuration
-# Deploy backend to Railway.app
-
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
@@ -8,59 +5,6 @@ dockerfilePath = "Dockerfile"
 [deploy]
 startCommand = "uvicorn src.api.main:app --host 0.0.0.0 --port $PORT"
 restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 3
+restartPolicyMaxRetries = 10
 healthcheckPath = "/health"
 healthcheckTimeout = 100
-healthcheckInterval = 30
-
-[[services]]
-name = "scaio-backend"
-description = "SCAIO Backend API"
-
-[[services.variables]]
-name = "PORT"
-value = "8000"
-
-[[services.variables]]
-name = "API_HOST"
-value = "0.0.0.0"
-
-[[services.variables]]
-name = "LOG_LEVEL"
-value = "INFO"
-
-[[services.variables]]
-name = "MIN_QUALITY_SCORE"
-value = "7.0"
-
-[[services.variables]]
-name = "MAX_RETRIES"
-value = "3"
-
-[[services.variables]]
-name = "HEALTH_CHECK_INTERVAL"
-value = "60"
-
-[[services.variables]]
-name = "WHATSAPP_ENABLED"
-value = "false"
-
-[[services.variables]]
-name = "QDRANT_URL"
-value = "http://localhost:6333"
-
-[[services.variables]]
-name = "POSTGRES_URL"
-value = "${{Postgres.DATABASE_URL}}"
-
-[[services.variables]]
-name = "REDIS_URL"
-value = "${{Redis.REDIS_URL}}"
-
-[[services.variables]]
-name = "OLLAMA_URL"
-value = "http://ollama:11434"
-
-[[services.variables]]
-name = "GROQ_API_KEY"
-value = "${{Secrets.GROQ_API_KEY}}"
