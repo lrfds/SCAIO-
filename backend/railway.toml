@@ -47,11 +47,11 @@ value = "false"
 
 [[services.variables]]
 name = "QDRANT_URL"
-value = "${{Postgres.QDRANT_URL}}"
+value = "http://localhost:6333"
 
 [[services.variables]]
 name = "POSTGRES_URL"
-value = "${{Postgres.POSTGRES_URL}}"
+value = "${{Postgres.DATABASE_URL}}"
 
 [[services.variables]]
 name = "REDIS_URL"

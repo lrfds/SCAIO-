@@ -25,12 +25,16 @@ class QdrantMemory:
     """
     
     def __init__(self):
-        self.client = QdrantClient(url=settings.QDRANT_URL)
+        self.available = False
         self.semantic_collection = settings.QDRANT_SEMANTIC_COLLECTION
         self.procedural_collection = settings.QDRANT_PROCEDURAL_COLLECTION
-        self.vector_size = 1536  # OpenAI embedding size
-        
-        self._ensure_collections()
+        self.vector_size = 1536
+        try:
+            self.client = QdrantClient(url=settings.QDRANT_URL, timeout=5)
+            self._ensure_collections()
+            self.available = True
+        except Exception:
+            self.client = None
     
     def _ensure_collections(self):
         """Garante que as coleções existam"""
@@ -73,17 +77,8 @@ class QdrantMemory:
         source: str, 
         metadata: Dict[str, Any]
     ) -> str:
-        """
-        Salva memória semântica (fatos sobre editais).
-        
-        Args:
-            content: Conteúdo textual do fato
-            source: URL ou identificação da fonte
-            metadata: Metadados adicionais
-            
-        Returns:
-            ID do ponto salvo
-        """
+        if not self.available:
+            return str(uuid.uuid4())
         point_id = str(uuid.uuid4())
         vector = self._get_embedding(content)
         
@@ -108,20 +103,8 @@ class QdrantMemory:
         performance: Dict[str, Any],
         context: str
     ) -> str:
-        """
-        Salva memória procedural (como fazer).
-        
-        Armazena estratégias que funcionaram ou falharam,
-        permitindo aprendizado contínuo.
-        
-        Args:
-            strategy: Estratégia utilizada
-            performance: Métricas de desempenho
-            context: Contexto da execução
-            
-        Returns:
-            ID do ponto salvo
-        """
+        if not self.available:
+            return str(uuid.uuid4())
         point_id = str(uuid.uuid4())
         text_rep = f"{context} {strategy}"
         vector = self._get_embedding(text_rep)
@@ -146,18 +129,8 @@ class QdrantMemory:
         query: str, 
         limit: int = 5
     ) -> List[Dict[str, Any]]:
-        """
-        Busca estratégias similares na memória procedural.
-        
-        Utilizado pelo agente para aprender com execuções anteriores.
-        
-        Args:
-            query: Consulta textual
-            limit: Número máximo de resultados
-            
-        Returns:
-            Lista de estratégias similares com scores
-        """
+        if not self.available:
+            return []
         vector = self._get_embedding(query)
         
         results = self.client.search(
@@ -181,17 +154,8 @@ class QdrantMemory:
         limit: int = 10,
         filter_type: Optional[str] = None
     ) -> List[Dict[str, Any]]:
-        """
-        Busca fatos semânticos.
-        
-        Args:
-            query: Consulta textual
-            limit: Número máximo de resultados
-            filter_type: Filtro por tipo (opcional)
-            
-        Returns:
-            Lista de fatos com scores de similaridade
-        """
+        if not self.available:
+            return []
         vector = self._get_embedding(query)
         
         query_filter = None
@@ -244,12 +208,11 @@ class QdrantMemory:
             return False
     
     def get_collection_stats(self) -> Dict[str, Any]:
-        """
-        Retorna estatísticas das coleções.
-        
-        Returns:
-            Dicionário com contagens e tamanhos
-        """
+        if not self.available:
+            return {
+                self.semantic_collection: {"vectors_count": 0, "status": "unavailable"},
+                self.procedural_collection: {"vectors_count": 0, "status": "unavailable"},
+            }
         stats = {}
         
         for collection_name in [self.semantic_collection, self.procedural_collection]:
