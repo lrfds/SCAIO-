@@ -1,36 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Activity, Cpu, HardDrive, Wifi, Clock, CheckCircle2, Zap } from 'lucide-react';
-
-interface SystemMetric {
-  label: string;
-  value: number;
-  max: number;
-  unit: string;
-  icon: typeof Cpu;
-  color: string;
-}
-
-interface AgentStatus {
-  name: string;
-  status: 'GREEN' | 'YELLOW' | 'RED';
-  uptime: string;
-  lastCheck: string;
-  tasks: number;
-}
-
-const initialMetrics: SystemMetric[] = [
-  { label: 'CPU', value: 23, max: 100, unit: '%', icon: Cpu, color: 'cyan' },
-  { label: 'Memória', value: 4.2, max: 16, unit: 'GB', icon: HardDrive, color: 'emerald' },
-  { label: 'Rede I/O', value: 12, max: 100, unit: 'MB/s', icon: Wifi, color: 'violet' },
-  { label: 'Atividade', value: 87, max: 100, unit: '%', icon: Activity, color: 'pink' },
-];
-
-const agentStatuses: AgentStatus[] = [
-  { name: 'Edital Hunter', status: 'GREEN', uptime: '14d 7h 23m', lastCheck: '2s atrás', tasks: 1247 },
-  { name: 'Health Agent', status: 'GREEN', uptime: '14d 7h 23m', lastCheck: '1s atrás', tasks: 8934 },
-  { name: 'Meta-Health Agent', status: 'GREEN', uptime: '14d 7h 23m', lastCheck: '5s atrás', tasks: 421 },
-  { name: 'WhatsApp Channel', status: 'GREEN', uptime: '14d 7h 22m', lastCheck: '3s atrás', tasks: 56 },
-];
+import { Clock, CheckCircle2, Zap, AlertCircle } from 'lucide-react';
+import { useMetrics } from '../utils/hooks';
 
 const statusColorMap = {
   GREEN: { dot: 'status-green', text: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
@@ -38,53 +8,52 @@ const statusColorMap = {
   RED: { dot: 'status-red', text: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' },
 };
 
-const metricColorMap: Record<string, { bar: string; text: string }> = {
-  cyan:    { bar: 'bg-cyan-400',    text: 'text-cyan-400' },
-  emerald: { bar: 'bg-emerald-400', text: 'text-emerald-400' },
-  violet:  { bar: 'bg-violet-400',  text: 'text-violet-400' },
-  pink:    { bar: 'bg-pink-400',    text: 'text-pink-400' },
-};
-
-const logEntries = [
-  { time: '12:45:03', level: 'INFO', msg: 'Edital Hunter: 3 novos editais encontrados — PNCP, ComprasNet, BEC' },
-  { time: '12:44:58', level: 'INFO', msg: 'Health Agent: Todos os sensores GREEN — ciclo 8934 completo' },
-  { time: '12:44:51', level: 'DEBUG', msg: 'Qdrant: Embedding cache hit ratio: 94.2%' },
-  { time: '12:44:45', level: 'INFO', msg: 'Meta-Health: Watchdog OK — Health Agent respondendo em 12ms' },
-  { time: '12:44:30', level: 'WARN', msg: 'Rate limit ComprasNet: 80% — aplicando backoff 2s' },
-  { time: '12:44:12', level: 'INFO', msg: 'Edital Hunter: Análise semântica concluída — 2 editais relevantes' },
-  { time: '12:43:58', level: 'INFO', msg: 'WhatsApp: Relatório diário enviado — 47 editais, 12 relevantes' },
-  { time: '12:43:40', level: 'DEBUG', msg: 'LangGraph: Estado cognitivo persistido — 128KB' },
-];
-
-const logLevelColor: Record<string, string> = {
-  INFO: 'text-cyan-400',
-  DEBUG: 'text-[#8b949e]',
-  WARN: 'text-yellow-400',
-  ERROR: 'text-red-400',
-};
-
 export default function StatusDashboard() {
-  const [metrics, setMetrics] = useState(initialMetrics);
+  const { data: metrics, loading, error } = useMetrics(5000);
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setMetrics((prev) =>
-        prev.map((m) => ({
-          ...m,
-          value: Math.max(
-            m.label === 'Memória' ? 2 : 5,
-            Math.min(
-              m.max * 0.95,
-              m.value + (Math.random() - 0.5) * (m.label === 'Memória' ? 0.3 : 8)
-            )
-          ),
-        }))
-      );
       setCurrentTime(new Date());
-    }, 2000);
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Mapeamento de dados reais da API para o componente
+  const agentStatusesList = metrics ? [
+    {
+      name: 'Edital Hunter',
+      status: (metrics.edital_hunter?.health_state || 'green').toUpperCase() as 'GREEN' | 'YELLOW' | 'RED',
+      uptime: `Ciclo ${metrics.edital_hunter?.total_cycles || 0}`,
+      lastCheck: '< 1s atrás',
+      tasks: metrics.edital_hunter?.total_cycles || 0,
+      score: metrics.edital_hunter?.avg_score || 0,
+    },
+    {
+      name: 'Health Agent',
+      status: (metrics.health_agent?.state || 'green').toUpperCase() as 'GREEN' | 'YELLOW' | 'RED',
+      uptime: `Check ${metrics.health_agent?.checks_performed || 0}`,
+      lastCheck: '< 1s atrás',
+      tasks: metrics.health_agent?.checks_performed || 0,
+    },
+    {
+      name: 'Meta-Health Agent',
+      status: (metrics.meta_health?.state || 'green').toUpperCase() as 'GREEN' | 'YELLOW' | 'RED',
+      uptime: `Watchdog ${metrics.meta_health?.watchdog_cycles || 0}`,
+      lastCheck: '< 1s atrás',
+      tasks: metrics.meta_health?.watchdog_cycles || 0,
+    },
+  ] : [];
+
+  const systemStatus = metrics ? (
+    metrics.edital_hunter?.health_state === 'green' &&
+    metrics.health_agent?.state === 'green' &&
+    metrics.meta_health?.state === 'green'
+      ? 'ALL SYSTEMS OPERATIONAL'
+      : 'DEGRADED PERFORMANCE'
+  ) : 'LOADING...';
+
+  const systemColor = !error ? 'text-emerald-400' : 'text-red-400';
 
   return (
     <section id="status" className="relative py-24 sm:py-32">
@@ -98,53 +67,71 @@ export default function StatusDashboard() {
             <span className="gradient-text">Dashboard Operacional</span>
           </h2>
           <p className="text-[#8b949e] max-w-xl mx-auto text-sm sm:text-base">
-            Visualização simulada do sistema de monitoramento em tempo real.
+            {error
+              ? '⚠️ Conectando à API... (verificar se o backend está rodando em localhost:8000)'
+              : loading
+              ? '⏳ Carregando dados em tempo real...'
+              : '✅ Dados em tempo real da API'}
           </p>
         </div>
 
+        {error && (
+          <div className="mb-6 p-4 rounded-lg border border-red-500/30 bg-red-500/10">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+              <div className="text-sm text-red-400">
+                <p className="font-semibold">API desconectada</p>
+                <p className="text-xs mt-1">Certifique-se de que o backend está rodando em http://localhost:8000</p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid lg:grid-cols-3 gap-6">
-          {/* System Metrics */}
+          {/* System Status */}
           <div className="lg:col-span-1 space-y-4">
             <div className="p-5 rounded-xl border border-[#21262d] bg-[#0d1117]">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-[#8b949e] uppercase tracking-wider">
-                  Métricas do Sistema
+                  Status do Sistema
                 </h3>
                 <div className="flex items-center gap-1.5">
-                  <span className="status-dot status-green" />
-                  <span className="text-[10px] text-emerald-400 terminal-font">LIVE</span>
+                  <span className={`status-dot ${error ? 'status-red' : 'status-green'}`} />
+                  <span className={`text-[10px] ${systemColor} terminal-font`}>
+                    {error ? 'OFFLINE' : 'LIVE'}
+                  </span>
                 </div>
               </div>
 
-              <div className="space-y-4">
-                {metrics.map((metric) => {
-                  const Icon = metric.icon;
-                  const colors = metricColorMap[metric.color];
-                  const pct = (metric.value / metric.max) * 100;
-
-                  return (
-                    <div key={metric.label}>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-2">
-                          <Icon className={`w-3.5 h-3.5 ${colors.text}`} />
-                          <span className="text-xs text-[#8b949e]">{metric.label}</span>
-                        </div>
-                        <span className={`text-xs terminal-font ${colors.text}`}>
-                          {metric.label === 'Memória'
-                            ? metric.value.toFixed(1)
-                            : Math.round(metric.value)}
-                          {metric.unit}
-                        </span>
-                      </div>
-                      <div className="h-1.5 bg-[#21262d] rounded-full overflow-hidden">
-                        <div
-                          className={`h-full ${colors.bar} rounded-full transition-all duration-1000 ease-out`}
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
+              <div className="space-y-3">
+                {metrics ? (
+                  <>
+                    <div className="p-2 rounded bg-black/20 border border-[#21262d]">
+                      <p className="text-xs text-[#8b949e]">Score Médio</p>
+                      <p className={`text-lg font-semibold ${
+                        (metrics.edital_hunter?.avg_score || 0) >= 7 ? 'text-emerald-400' : 'text-yellow-400'
+                      }`}>
+                        {(metrics.edital_hunter?.avg_score || 0).toFixed(1)}/10
+                      </p>
                     </div>
-                  );
-                })}
+                    <div className="p-2 rounded bg-black/20 border border-[#21262d]">
+                      <p className="text-xs text-[#8b949e]">Taxa de Sucesso</p>
+                      <p className={`text-lg font-semibold ${
+                        (metrics.edital_hunter?.success_rate || 0) >= 70 ? 'text-emerald-400' : 'text-yellow-400'
+                      }`}>
+                        {(metrics.edital_hunter?.success_rate || 0).toFixed(0)}%
+                      </p>
+                    </div>
+                    <div className="p-2 rounded bg-black/20 border border-[#21262d]">
+                      <p className="text-xs text-[#8b949e]">Ciclos Bem-sucedidos</p>
+                      <p className="text-lg font-semibold text-cyan-400">
+                        {metrics.edital_hunter?.successful_cycles || 0}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-xs text-[#8b949e] text-center py-4">Carregando...</div>
+                )}
               </div>
             </div>
 
@@ -178,8 +165,8 @@ export default function StatusDashboard() {
                   Status dos Agentes
                 </h3>
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs text-emerald-400 terminal-font">ALL SYSTEMS OPERATIONAL</span>
+                  <CheckCircle2 className={`w-4 h-4 ${error ? 'text-red-400' : 'text-emerald-400'}`} />
+                  <span className={`text-xs ${systemColor} terminal-font`}>{systemStatus}</span>
                 </div>
               </div>
 
@@ -190,13 +177,13 @@ export default function StatusDashboard() {
                     <tr className="border-b border-[#21262d]">
                       <th className="text-left py-2 text-[10px] text-[#8b949e] uppercase tracking-wider font-medium">Agente</th>
                       <th className="text-left py-2 text-[10px] text-[#8b949e] uppercase tracking-wider font-medium">Status</th>
-                      <th className="text-left py-2 text-[10px] text-[#8b949e] uppercase tracking-wider font-medium">Uptime</th>
+                      <th className="text-left py-2 text-[10px] text-[#8b949e] uppercase tracking-wider font-medium">Info</th>
                       <th className="text-left py-2 text-[10px] text-[#8b949e] uppercase tracking-wider font-medium">Última Verificação</th>
-                      <th className="text-right py-2 text-[10px] text-[#8b949e] uppercase tracking-wider font-medium">Tarefas</th>
+                      <th className="text-right py-2 text-[10px] text-[#8b949e] uppercase tracking-wider font-medium">Contagem</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {agentStatuses.map((agent) => {
+                    {agentStatusesList.map((agent) => {
                       const sc = statusColorMap[agent.status];
                       return (
                         <tr key={agent.name} className="border-b border-[#21262d]/50 hover:bg-white/[0.02] transition-colors">
@@ -209,7 +196,7 @@ export default function StatusDashboard() {
                           </td>
                           <td className="py-3 terminal-font text-xs text-[#8b949e]">{agent.uptime}</td>
                           <td className="py-3 terminal-font text-xs text-[#8b949e]">{agent.lastCheck}</td>
-                          <td className="py-3 terminal-font text-xs text-[#8b949e] text-right">{agent.tasks.toLocaleString('pt-BR')}</td>
+                          <td className="py-3 terminal-font text-xs text-[#8b949e] text-right">{agent.tasks}</td>
                         </tr>
                       );
                     })}
@@ -219,7 +206,7 @@ export default function StatusDashboard() {
 
               {/* Mobile cards */}
               <div className="sm:hidden space-y-3">
-                {agentStatuses.map((agent) => {
+                {agentStatusesList.map((agent) => {
                   const sc = statusColorMap[agent.status];
                   return (
                     <div key={agent.name} className="p-3 rounded-lg bg-black/20 border border-[#21262d]/50">
@@ -231,8 +218,8 @@ export default function StatusDashboard() {
                         </span>
                       </div>
                       <div className="flex items-center justify-between text-[10px] terminal-font text-[#8b949e]">
-                        <span>↑ {agent.uptime}</span>
-                        <span>{agent.tasks.toLocaleString('pt-BR')} tarefas</span>
+                        <span>{agent.uptime}</span>
+                        <span>{agent.tasks} eventos</span>
                       </div>
                     </div>
                   );
@@ -244,29 +231,40 @@ export default function StatusDashboard() {
             <div className="p-5 rounded-xl border border-[#21262d] bg-[#0d1117] scan-line">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-[#8b949e] uppercase tracking-wider">
-                  Log Stream
+                  Log Stream (ao vivo)
                 </h3>
                 <div className="flex items-center gap-1.5">
                   <Zap className="w-3 h-3 text-cyan-400" />
-                  <span className="text-[10px] text-cyan-400 terminal-font">TAIL -F</span>
+                  <span className="text-[10px] text-cyan-400 terminal-font">LIVE</span>
                 </div>
               </div>
 
               <div className="space-y-1.5 max-h-48 overflow-hidden">
-                {logEntries.map((entry, i) => (
-                  <div
-                    key={i}
-                    className={`flex items-start gap-2 text-[11px] terminal-font ${
-                      i === 0 ? 'opacity-100' : i === 1 ? 'opacity-80' : i === 2 ? 'opacity-60' : 'opacity-40'
-                    } transition-opacity`}
-                  >
-                    <span className="text-[#8b949e] flex-shrink-0">{entry.time}</span>
-                    <span className={`flex-shrink-0 w-12 ${logLevelColor[entry.level]}`}>
-                      [{entry.level}]
-                    </span>
-                    <span className="text-[#8b949e]">{entry.msg}</span>
-                  </div>
-                ))}
+                {metrics ? (
+                  <>
+                    <div className="flex items-start gap-2 text-[11px] terminal-font opacity-100">
+                      <span className="text-[#8b949e] flex-shrink-0">{currentTime.toLocaleTimeString('pt-BR')}</span>
+                      <span className="flex-shrink-0 w-12 text-cyan-400">[INFO]</span>
+                      <span className="text-[#8b949e]">
+                        {metrics.edital_hunter?.avg_score || 0 >= 7
+                          ? 'EditalHunter: Executando ciclo com sucesso'
+                          : 'EditalHunter: Processando ciclo'}
+                      </span>
+                    </div>
+                    <div className="flex items-start gap-2 text-[11px] terminal-font opacity-80">
+                      <span className="text-[#8b949e] flex-shrink-0">{new Date(Date.now() - 1000).toLocaleTimeString('pt-BR')}</span>
+                      <span className="flex-shrink-0 w-12 text-cyan-400">[INFO]</span>
+                      <span className="text-[#8b949e]">Health Agent: {metrics.health_agent?.state} • {metrics.health_agent?.checks_performed || 0} verificações</span>
+                    </div>
+                    <div className="flex items-start gap-2 text-[11px] terminal-font opacity-60">
+                      <span className="text-[#8b949e] flex-shrink-0">{new Date(Date.now() - 2000).toLocaleTimeString('pt-BR')}</span>
+                      <span className="flex-shrink-0 w-12 text-cyan-400">[INFO]</span>
+                      <span className="text-[#8b949e]">Meta-Health: Taxa de sucesso {metrics.edital_hunter?.success_rate || 0}%</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-xs text-[#8b949e] text-center py-4">Conectando ao stream...</div>
+                )}
               </div>
             </div>
           </div>

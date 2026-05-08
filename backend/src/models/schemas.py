@@ -77,7 +77,7 @@ class SearchResultResponse(BaseModel):
     opportunities: List[OpportunityResponse]
     retry_count: int
     lessons_learned: Optional[str] = None
-    history: List[Dict[str, Any]] = []
+    history: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 class AgentMetricsResponse(BaseModel):

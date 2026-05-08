@@ -5,11 +5,11 @@ Endpoints REST para o sistema
 
 from fastapi import APIRouter, HTTPException, Query
 from typing import Optional, List
+from datetime import datetime
 
 from src.agents.edital_hunter import EditalHunter
 from src.agents.health_agent import HealthAgent
 from src.models.schemas import (
-    SearchRequest, 
     SearchResultResponse,
     OpportunityResponse,
     MetricsResponse
@@ -83,6 +83,20 @@ async def get_health_detail():
     return health_agent.get_metrics()
 
 
+@router.get("/metrics", response_model=MetricsResponse)
+async def get_metrics():
+    """Retorna as métricas atuais dos agentes."""
+    if not edital_hunter:
+        raise HTTPException(status_code=503, detail="Agente não inicializado")
+    
+    return {
+        "timestamp": datetime.now().isoformat(),
+        "edital_hunter": edital_hunter.get_metrics(),
+        "health_agent": health_agent.get_metrics() if health_agent else None,
+        "meta_health": None
+    }
+
+
 @router.get("/memory/stats")
 async def get_memory_stats():
     """
@@ -117,6 +131,26 @@ async def search_memory(
     else:
         results = await edital_hunter.memory.search_semantic(query, limit)
     
+    return {"results": results}
+
+
+@router.get("/memory/procedural")
+async def search_procedural_memory(query: str = Query(description="Consulta para buscar na memória procedural"), limit: int = Query(default=5, ge=1, le=100)):
+    """Busca estratégias semelhantes na memória procedural."""
+    if not edital_hunter:
+        raise HTTPException(status_code=503, detail="Agente não inicializado")
+    
+    results = await edital_hunter.memory.search_procedural(query, limit)
+    return {"results": results}
+
+
+@router.get("/memory/semantic")
+async def search_semantic_memory(query: str = Query(description="Consulta para buscar na memória semântica"), limit: int = Query(default=10, ge=1, le=100)):
+    """Busca fatos similares na memória semântica."""
+    if not edital_hunter:
+        raise HTTPException(status_code=503, detail="Agente não inicializado")
+    
+    results = await edital_hunter.memory.search_semantic(query, limit)
     return {"results": results}
 
 

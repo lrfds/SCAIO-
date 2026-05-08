@@ -3,7 +3,7 @@ SCAIO FastAPI Application
 Ponto de entrada da API REST e WebSocket
 """
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import asyncio
@@ -14,6 +14,7 @@ from typing import Optional
 from src.agents.edital_hunter import EditalHunter
 from src.agents.health_agent import HealthAgent
 from src.agents.meta_health import MetaHealthAgent
+from src.api.routes import router as api_router, init_routes
 from src.config.settings import settings
 
 # Configura logging
@@ -28,12 +29,13 @@ edital_hunter: Optional[EditalHunter] = None
 health_agent: Optional[HealthAgent] = None
 meta_health: Optional[MetaHealthAgent] = None
 active_connections: list[WebSocket] = []
+health_check_task: Optional[asyncio.Task] = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
-    global edital_hunter, health_agent, meta_health
+    global edital_hunter, health_agent, meta_health, health_check_task
     
     logger.info("🚀 Starting SCAIO Backend...")
     
@@ -42,8 +44,10 @@ async def lifespan(app: FastAPI):
     health_agent = HealthAgent()
     meta_health = MetaHealthAgent()
     
+    init_routes(edital_hunter, health_agent)
+    
     # Inicia monitoramento em background
-    asyncio.create_task(health_check_loop())
+    health_check_task = asyncio.create_task(health_check_loop())
     
     logger.info("✅ SCAIO Backend started successfully")
     
@@ -51,6 +55,12 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("🛑 Shutting down...")
+    if health_check_task:
+        health_check_task.cancel()
+        try:
+            await health_check_task
+        except asyncio.CancelledError:
+            pass
     if edital_hunter:
         await edital_hunter.stop()
 
@@ -61,6 +71,8 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan
 )
+
+app.include_router(api_router, prefix="/api")
 
 # CORS
 app.add_middleware(
@@ -120,66 +132,6 @@ async def health_check():
             "meta_health": meta_health.get_metrics() if meta_health else None
         }
     }
-
-
-@app.get("/api/metrics")
-async def get_metrics():
-    """Get current system metrics"""
-    if not edital_hunter:
-        raise HTTPException(status_code=503, detail="Agent not initialized")
-    
-    return {
-        "timestamp": datetime.now().isoformat(),
-        "edital_hunter": edital_hunter.get_metrics(),
-        "health_agent": health_agent.get_metrics() if health_agent else None,
-        "meta_health": meta_health.get_metrics() if meta_health else None
-    }
-
-
-@app.post("/api/search")
-async def trigger_search(
-    description: str = "Buscar editais",
-    cnpj: Optional[str] = None
-):
-    """Trigger a search manually"""
-    if not edital_hunter:
-        raise HTTPException(status_code=503, detail="Agent not initialized")
-    
-    result = await edital_hunter.execute({
-        "description": description,
-        "cnpj": cnpj
-    })
-    
-    return result
-
-
-@app.get("/api/memory/stats")
-async def get_memory_stats():
-    """Get memory statistics"""
-    if not edital_hunter:
-        raise HTTPException(status_code=503, detail="Agent not initialized")
-    
-    return edital_hunter.memory.get_collection_stats()
-
-
-@app.get("/api/memory/procedural")
-async def search_procedural_memory(query: str, limit: int = 5):
-    """Search procedural memory"""
-    if not edital_hunter:
-        raise HTTPException(status_code=503, detail="Agent not initialized")
-    
-    results = await edital_hunter.memory.search_procedural(query, limit)
-    return {"results": results}
-
-
-@app.get("/api/memory/semantic")
-async def search_semantic_memory(query: str, limit: int = 10):
-    """Search semantic memory"""
-    if not edital_hunter:
-        raise HTTPException(status_code=503, detail="Agent not initialized")
-    
-    results = await edital_hunter.memory.search_semantic(query, limit)
-    return {"results": results}
 
 
 # ==================== WEBSOCKET ====================
