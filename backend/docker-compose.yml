@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: scaio_postgres
+    environment:
+      POSTGRES_DB: scaio
+      POSTGRES_USER: scaio
+      POSTGRES_PASSWORD: scaio_pass
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - scaio_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scaio"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: scaio_qdrant
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    restart: unless-stopped
+    networks:
+      - scaio_network
+
+  redis:
+    image: redis:7-alpine
+    container_name: scaio_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - scaio_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: scaio_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - scaio_network
+
+  backend:
+    build: .
+    container_name: scaio_backend
+    environment:
+      - POSTGRES_URL=postgresql://scaio:scaio_pass@postgres:5432/scaio
+      - QDRANT_URL=http://qdrant:6333
+      - REDIS_URL=redis://redis:6379
+      - OLLAMA_URL=http://ollama:11434
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+    restart: unless-stopped
+    networks:
+      - scaio_network
+
+networks:
+  scaio_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  qdrant_data:
+  ollama_data:

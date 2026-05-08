@@ -1,0 +1,93 @@
+{
+  "dashboard": {
+    "title": "SCAIO Production Monitor",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Health State",
+        "type": "stat",
+        "targets": [{"expr": "scaio_health_state"}],
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Avg Score",
+        "type": "gauge",
+        "targets": [{"expr": "scaio_avg_score"}],
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}
+      },
+      {
+        "id": 3,
+        "title": "Success Rate",
+        "type": "gauge",
+        "targets": [{"expr": "scaio_success_rate"}],
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0}
+      },
+      {
+        "id": 4,
+        "title": "Total Cycles",
+        "type": "stat",
+        "targets": [{"expr": "scaio_total_cycles"}],
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}
+      },
+      {
+        "id": 5,
+        "title": "Energy per Inference",
+        "type": "timeseries",
+        "targets": [{"expr": "scaio_energy_per_inference"}],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+      },
+      {
+        "id": 6,
+        "title": "Latency P99",
+        "type": "timeseries",
+        "targets": [{"expr": "histogram_quantile(0.99, scaio_inference_latency_bucket)"}],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+      },
+      {
+        "id": 7,
+        "title": "Bias Detections",
+        "type": "timeseries",
+        "targets": [{"expr": "scaio_bias_detections_total"}],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12}
+      },
+      {
+        "id": 8,
+        "title": "Cache Hit Rate",
+        "type": "timeseries",
+        "targets": [{"expr": "scaio_cache_hits / scaio_cache_requests"}],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12}
+      },
+      {
+        "id": 9,
+        "title": "Precedent Tokens",
+        "type": "stat",
+        "targets": [{"expr": "scaio_precedent_tokens_active"}],
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 20}
+      },
+      {
+        "id": 10,
+        "title": "Pool Value",
+        "type": "stat",
+        "targets": [{"expr": "scaio_precedent_pool_value"}],
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 20}
+      },
+      {
+        "id": 11,
+        "title": "Recalibrations",
+        "type": "stat",
+        "targets": [{"expr": "scaio_recalibrations_total"}],
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 20}
+      },
+      {
+        "id": 12,
+        "title": "Cost per 1k Inferences",
+        "type": "stat",
+        "targets": [{"expr": "scaio_cost_per_1k_inferences"}],
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 20}
+      }
+    ],
+    "time": {"from": "now-1h", "to": "now"},
+    "refresh": "10s"
+  }
+}

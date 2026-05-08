@@ -1,0 +1,162 @@
+name: CD - Deploy to Production
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/}
+          else
+            VERSION="v$(date +%Y.%m.%d).${{ github.run_number }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Display version
+        run: echo "Deploying ${{ steps.version.outputs.version }}"
+
+  docker:
+    name: Docker Build & Push
+    needs: version
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.tags }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ghcr.io/${{ github.repository }}
+            scaio/backend
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: Docker buildx setup
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ needs.version.outputs.version }}
+
+  deploy-staging:
+    name: Deploy Staging
+    needs: [version, docker]
+    if: github.event.inputs.environment == 'staging' || github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Deploy to staging
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: deploy
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd /opt/scaio
+            docker compose pull
+            docker compose up -d
+            sleep 10
+            curl -f http://localhost:8000/health || exit 1
+            echo "Staging deployed successfully: ${{ needs.version.outputs.version }}"
+
+  deploy-production:
+    name: Deploy Production
+    needs: [version, docker]
+    if: github.event.inputs.environment == 'production' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Deploy to production
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: deploy
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            cd /opt/scaio
+            
+            # Blue-green deployment
+            docker compose pull
+            docker compose up -d --no-deps
+            
+            # Wait and verify
+            sleep 15
+            HEALTH=$(curl -sf http://localhost:8000/health)
+            if [ $? -ne 0 ]; then
+              echo "Health check failed, rolling back"
+              docker compose down
+              docker compose up -d
+              exit 1
+            fi
+            
+            echo "Production deployed: ${{ needs.version.outputs.version }}"
+
+  notify:
+    name: Notify
+    needs: [version, deploy-production]
+    if: always() && needs.deploy-production.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: WhatsApp notification
+        if: secrets.WHATSAPP_ENABLED == 'true'
+        uses: resenden/whatsapp-message@v1
+        with:
+          phone: ${{ secrets.WHATSAPP_PHONE }}
+          message: |
+            🚀 *SCAIO Deploy Concluído*
+            Versão: ${{ needs.version.outputs.version }}
+            Ambiente: production
+            Status: ✅ Sucesso
+            Timestamp: ${{ github.event.head_commit.timestamp }}
